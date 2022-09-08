@@ -74,15 +74,6 @@ app.get("/search", function (req, res) {
   }
 });
 
-app.delete("/delete", function (req, res) {
-  console.log(req.body);
-  req.body._id = parseInt(req.body._id);
-  db.collection("post").deleteOne(req.body, function (err, result) {
-    console.log("삭제완료");
-    res.status(200).send({ message: "성공했습니다" });
-  });
-});
-
 app.get("/detail/:id", function (req, res) {
   db.collection("post").findOne(
     { _id: parseInt(req.params.id) },
@@ -202,13 +193,25 @@ app.post("/register", function (req, res) {
     }
   );
 });
+app.delete("/delete", function (req, res) {
+  console.log(req.body);
+  req.body._id = parseInt(req.body._id);
+
+  let deleteData = { _id: req.body._id, 작성자: req.user._id };
+  db.collection("post").deleteOne(deleteData, function (err, result) {
+    console.log("삭제완료");
+    if (err) {
+      console.log(err);
+    }
+    res.status(200).send({ message: "성공했습니다" });
+  });
+});
 
 app.post("/add", function (req, res) {
   res.send("전송완료");
   db.collection("counter").findOne(
     { name: "게시물갯수" },
     function (err, result) {
-      console.log(result.totalPost);
       let tP = result.totalPost;
 
       let 저장할거 = {
@@ -233,4 +236,77 @@ app.post("/add", function (req, res) {
   );
 
   console.log(req.body);
+});
+
+app.use("/shop", require("./routes/shop.js"));
+app.use("/board", require("./routes/board.js"));
+
+let multer = require("multer");
+let storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "./public/image");
+  },
+  filename: function (req, file, cb) {
+    cb(null, file.originalname);
+  },
+  fileFilter: function (req, file, callback) {
+    var ext = path.extname(file.originalname);
+    if (ext !== ".png" && ext !== ".jpg" && ext !== ".jpeg") {
+      return callback(new Error("PNG, JPG만 업로드하세요"));
+    }
+    callback(null, true);
+  },
+  limits: {
+    fileSize: 1024 * 1024,
+  },
+});
+
+let upload = multer({ storage: storage });
+
+app.get("/upload", function (req, res) {
+  res.render("upload.ejs");
+});
+
+app.post("/upload", upload.array("profile", 10), function (req, res) {
+  res.send("업로드완료");
+});
+
+app.get("/image/:imageName", function (req, res) {
+  res.sendFile(__dirname + "/public/image/" + req.params.imageName);
+});
+
+app.get("/logout", function (req, res) {
+  console.log("logout");
+  req.logout(function (err) {
+    if (err) {
+      return next(err);
+    }
+    req.session.destroy(function () {
+      res.cookie("connect.sid", "", { maxAge: 0 });
+      res.redirect("/");
+    });
+  });
+});
+const { ObjectId } = require("mongodb");
+const { checkout } = require("./routes/shop.js");
+
+app.post("/chat", logincheck, function (요청, 응답) {
+  let 저장할거 = {
+    title: "무슨채팅방",
+    member: [ObjectId(요청.body.당한사람id), 요청.user._id],
+    date: new Date(),
+  };
+  db.collection("chatroom")
+    .insertOne(저장할거)
+    .then((결과) => {
+      응답.send("성공");
+    });
+});
+app.get("/chat", logincheck, function (요청, 응답) {
+  db.collection("chatroom")
+    .find({ member: 요청.user._id })
+    .toArray()
+    .then((결과) => {
+      응답.render("chat.ejs", { data: 결과 });
+    });
 });
